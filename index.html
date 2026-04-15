@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clue — Deduction Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,400&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c0b0a;
+  --surface: #141210;
+  --surface2: #1c1a17;
+  --surface3: #252220;
+  --text: #e4ddd3;
+  --text-muted: #9c9080;
+  --text-dim: #5a5249;
+  --gold: #c9a84c;
+  --gold-dim: #7a6328;
+  --gold-bg: rgba(201,168,76,0.07);
+  --border: rgba(201,168,76,0.12);
+  --border-s: rgba(201,168,76,0.28);
+  --sus-bg: #1b1828; --sus-text: #a898e8; --sus-border: #4c3c8444;
+  --wpn-bg: #271818; --wpn-text: #e88080; --wpn-border: #7c3c3844;
+  --rm-bg:  #0e1c1a; --rm-text:  #72c8b8; --rm-border:  #2c6c6444;
+  --ff: 'IBM Plex Mono', 'Courier New', monospace;
+  --fd: 'Playfair Display', Georgia, serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh;line-height:1.5}
+
+/* ── HEADER ── */
+.hdr{border-bottom:0.5px solid var(--border-s);padding:18px 24px 14px;display:flex;align-items:baseline;gap:14px}
+.hdr h1{font-family:var(--fd);font-size:24px;font-weight:600;letter-spacing:.04em;color:var(--gold)}
+.hdr .sub{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim)}
+
+/* ── STATUS BAR ── */
+.status-bar{display:flex;gap:20px;padding:8px 24px;border-bottom:0.5px solid var(--border);background:var(--surface);overflow-x:auto}
+.stat-pill{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.stat-dot{width:6px;height:6px;border-radius:50%;background:var(--text-dim)}
+.stat-dot.sus{background:var(--sus-text)}.stat-dot.wpn{background:var(--wpn-text)}.stat-dot.rm{background:var(--rm-text)}.stat-dot.gold{background:var(--gold)}
+.stat-txt{font-size:10px;color:var(--text-dim)}
+.stat-val{font-size:10px;color:var(--text-muted);font-weight:500}
+
+/* ── TABS ── */
+.tabs{display:flex;border-bottom:0.5px solid var(--border);padding:0 24px;overflow-x:auto}
+.tab{padding:11px 20px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;border-bottom:1.5px solid transparent;white-space:nowrap;transition:all .15s}
+.tab:hover{color:var(--text-muted)}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+
+/* ── PANELS ── */
+.panel{display:none;padding:24px;max-width:1120px}
+.panel.active{display:block}
+
+/* ── FIELDS ── */
+.field{display:flex;flex-direction:column;gap:4px}
+.field label,.flbl{font-size:9px;text-transform:uppercase;letter-spacing:.15em;color:var(--text-dim)}
+.field input,.field select,select,input[type=text]{background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-family:var(--ff);font-size:12px;padding:8px 10px;border-radius:2px;outline:none;width:100%;transition:border-color .15s}
+.field input:focus,.field select:focus,select:focus,input[type=text]:focus{border-color:var(--gold-dim)}
+select option{background:var(--surface2)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+
+/* ── CHIPS ── */
+.slbl{font-size:9px;text-transform:uppercase;letter-spacing:.15em;color:var(--text-dim);margin-bottom:7px;margin-top:14px}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+.chip{padding:4px 12px;border-radius:2px;font-size:11px;cursor:pointer;border:0.5px solid var(--border);color:var(--text-muted);background:var(--surface2);transition:all .12s;font-family:var(--ff)}
+.chip:hover{border-color:var(--border-s);color:var(--text)}
+.chip.sus{background:var(--sus-bg);color:var(--sus-text);border-color:#5c4c9444}
+.chip.wpn{background:var(--wpn-bg);color:var(--wpn-text);border-color:#8c4c4844}
+.chip.rm {background:var(--rm-bg); color:var(--rm-text); border-color:#3c7c7444}
+
+/* ── BUTTON ── */
+.btn{background:transparent;border:0.5px solid var(--gold-dim);color:var(--gold);font-family:var(--ff);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:10px 22px;cursor:pointer;border-radius:2px;width:100%;transition:all .15s;margin-top:14px}
+.btn:hover{background:var(--gold-bg);border-color:var(--gold)}
+.btn:active{transform:scale(.99)}
+
+/* ── SOLUTION CARDS ── */
+.sol-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.sol-card{background:var(--surface2);border:0.5px solid var(--border);border-radius:3px;padding:12px 14px;text-align:center}
+.sol-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.15em;color:var(--text-dim);margin-bottom:5px}
+.sol-card .val{font-family:var(--fd);font-size:15px;font-style:italic;color:var(--text-dim)}
+.sol-card.known{border-color:var(--gold-dim);background:#1e1a0e}
+.sol-card.known .val{color:var(--gold);font-style:normal;font-weight:600}
+
+/* ── MATRIX ── */
+.mx-wrap{overflow-x:auto}
+table.mx{border-collapse:collapse;font-size:10px;font-family:var(--ff)}
+table.mx th,table.mx td{border:0.5px solid rgba(201,168,76,.07);padding:3px 5px;text-align:center;min-width:24px}
+table.mx .plbl{text-align:left;font-size:11px;padding:4px 12px;white-space:nowrap;color:var(--text);border-right:0.5px solid var(--border);min-width:85px}
+table.mx thead th{font-size:9px;letter-spacing:.06em;background:var(--surface)}
+.mx .cat-s{background:var(--sus-bg);color:#6c5ca4}
+.mx .cat-w{background:var(--wpn-bg);color:#8c4c48}
+.mx .cat-r{background:var(--rm-bg); color:#2c6c64}
+.mx .hc{writing-mode:vertical-rl;transform:rotate(180deg);height:78px;vertical-align:bottom;font-size:9px;background:var(--surface)}
+.mx .hc.s{color:var(--sus-text)}.mx .hc.w{color:var(--wpn-text)}.mx .hc.r{color:var(--rm-text)}
+.cy{color:#72c8b8;font-weight:500}.cn{color:var(--text-dim)}.cq{color:var(--text-dim);opacity:.35}.csol{color:var(--gold);font-weight:600}
+
+/* ── BADGES ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:2px;font-size:10px;margin:2px;font-family:var(--ff)}
+.bs{background:var(--sus-bg);color:var(--sus-text)}.bw{background:var(--wpn-bg);color:var(--wpn-text)}.br{background:var(--rm-bg);color:var(--rm-text)}
+.bp{background:var(--surface3);color:var(--text-dim);border:0.5px solid var(--border)}.bsh{background:#141f0c;color:#8cc46c}
+
+/* ── SUGGESTION LOG ── */
+.sug{background:var(--surface2);border:0.5px solid var(--border);border-radius:3px;padding:9px 12px;margin-bottom:7px}
+.sug .snum{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);margin-bottom:4px}
+
+/* ── RESP ROWS ── */
+.rr{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.rr .pn{font-size:11px;min-width:78px;flex-shrink:0;color:var(--text-muted)}
+
+/* ── ANALYSIS ── */
+.meter{display:flex;align-items:center;gap:20px;background:var(--surface2);border:0.5px solid var(--border);border-radius:3px;padding:14px 20px;margin-bottom:22px}
+.meter-num{font-family:var(--fd);font-size:40px;color:var(--gold);line-height:1;min-width:72px}
+.meter-right{flex:1}
+.meter-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:var(--text-dim);margin-bottom:7px}
+.bar-bg{background:var(--surface3);border-radius:2px;height:3px;overflow:hidden}
+.bar-fill{height:100%;background:var(--gold);border-radius:2px;transition:width .5s ease}
+
+.psec{margin-bottom:20px}
+.psec-hdr{font-size:9px;text-transform:uppercase;letter-spacing:.14em;padding-bottom:7px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.psec-hdr.s{color:var(--sus-text);border-bottom:0.5px solid var(--sus-border)}
+.psec-hdr.w{color:var(--wpn-text);border-bottom:0.5px solid var(--wpn-border)}
+.psec-hdr.r{color:var(--rm-text); border-bottom:0.5px solid var(--rm-border)}
+.pgrid{display:flex;flex-wrap:wrap;gap:6px}
+
+.pcell{border-radius:3px;padding:9px 13px;min-width:92px;text-align:center;transition:background .5s ease,color .3s ease;border:0.5px solid transparent}
+.pcell .pname{font-size:11px;font-weight:500;margin-bottom:3px}
+.pcell .pval{font-size:20px;line-height:1}
+.pcell .punit{font-size:9px;opacity:.7}
+.pcell.out{background:var(--surface2);border-color:rgba(255,255,255,.04)}
+.pcell.out .pname{color:var(--text-dim);text-decoration:line-through}
+.pcell.out .pval{color:var(--text-dim);font-size:14px}
+.pcell.confirmed{background:#221c08;border-color:var(--gold-dim)}
+.pcell.confirmed .pname{color:var(--gold)}
+.pcell.confirmed .pval{color:var(--gold)}
+
+.rec{background:var(--surface2);border:0.5px solid var(--border);border-left:2px solid var(--gold);border-radius:3px;padding:13px 16px;margin-top:4px}
+.rec-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:var(--gold);margin-bottom:8px}
+.rec-body{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ── MISC ── */
+hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
+.hint{font-size:10px;color:var(--text-dim);margin-bottom:10px}
+.prow{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.prow .plbl-f{font-size:11px;min-width:78px;color:var(--text-dim);flex-shrink:0}
+
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.25);border-radius:2px}
+
+@media(max-width:620px){
+  .panel{padding:16px}
+  .row2,.row3{grid-template-columns:1fr}
+  .sol-row{grid-template-columns:1fr}
+  .meter{flex-direction:column;gap:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>Clue</h1>
+  <span class="sub">Deduction Engine</span>
+</div>
+
+<div class="status-bar" id="status-bar">
+  <div class="stat-pill"><div class="stat-dot"></div><span class="stat-txt">Game not started</span></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('setup')">Setup</div>
+  <div class="tab" onclick="sw('matrix')">Matrix</div>
+  <div class="tab" onclick="sw('log')">Log Suggestion</div>
+  <div class="tab" onclick="sw('board')">Board</div>
+  <div class="tab" onclick="sw('analysis')">Analysis</div>
+</div>
+
+<!-- ════════════════════════════════ SETUP ════ -->
+<div class="panel active" id="panel-setup">
+  <div class="row2" style="max-width:360px">
+    <div class="field">
+      <label>Number of players</label>
+      <select id="npl" onchange="buildSetup()">
+        <option>3</option><option>4</option><option>5</option><option>6</option>
+      </select>
+    </div>
+  </div>
+  <div class="hint" style="margin-bottom:6px">Assign a character and starting room to each player</div>
+  <div id="pname-inputs" style="margin-bottom:4px"></div>
+
+  <hr class="div" style="margin:16px 0">
+  <div style="font-size:12px;color:var(--text);margin-bottom:3px">Your hand</div>
+  <div class="hint">Tap every card you were dealt</div>
+
+  <div class="slbl">Suspects</div>
+  <div class="chips" id="ch-s"></div>
+  <div class="slbl">Weapons</div>
+  <div class="chips" id="ch-w"></div>
+  <div class="slbl">Rooms</div>
+  <div class="chips" id="ch-r"></div>
+
+  <button class="btn" onclick="initGame()">Initialize Game ▶</button>
+</div>
+
+<!-- ════════════════════════════════ MATRIX ════ -->
+<div class="panel" id="panel-matrix">
+  <div id="token-card-mx"></div>
+  <div class="sol-row" id="sg-mx"></div>
+  <div class="mx-wrap">
+    <table class="mx" id="mxtbl"></table>
+  </div>
+  <div class="hint" style="margin-top:9px">✓ confirmed has &nbsp;·&nbsp; ✗ ruled out &nbsp;·&nbsp; · unknown &nbsp;·&nbsp; ★ solution card</div>
+  <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap" id="shortcut-mx"></div>
+</div>
+
+<!-- ════════════════════════════════ LOG ════ -->
+<div class="panel" id="panel-log">
+  <div id="log-inner">
+    <div class="row2" style="max-width:360px">
+      <div class="field"><label>Who suggested?</label><select id="s-who" onchange="buildResps()"></select></div>
+    </div>
+    <div class="row3">
+      <div class="field"><label>Suspect</label><select id="s-sus"></select></div>
+      <div class="field"><label>Weapon</label><select id="s-wpn"></select></div>
+      <div class="field"><label>Room</label><select id="s-rm"></select></div>
+    </div>
+    <div class="flbl" style="margin-bottom:8px">Responses (in clockwise order)</div>
+    <div id="resp-rows"></div>
+    <button class="btn" onclick="logSug()">Log Suggestion ▶</button>
+    <div id="show-advisor" style="margin-top:14px"></div>
+  </div>
+  <hr class="div">
+  <div class="slbl" style="margin-bottom:10px">Cards you've shown</div>
+  <div class="hint">Track which card you showed to whom — the tracker will recommend re-showing the same card to minimize info leakage.</div>
+  <div id="show-history"></div>
+  <hr class="div">
+  <div class="slbl" style="margin-bottom:10px">Suggestion history</div>
+  <div id="sug-hist"></div>
+</div>
+
+<!-- ════════════════════════════════ BOARD ════ -->
+<div class="panel" id="panel-board">
+  <div id="board-token-card"></div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <div class="field" style="margin:0;min-width:200px">
+      <label>Your current room</label>
+      <select id="cur-room" onchange="moveToRoom(this.value)">
+        <option value="">— select room —</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <label class="flbl">This turn's roll</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="adjustRoll(-1)" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:2px;cursor:pointer;font-size:16px;line-height:1">−</button>
+        <div id="roll-display" style="width:44px;height:32px;background:var(--surface2);border:0.5px solid var(--gold-dim);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:500;color:var(--gold);font-family:var(--fd)">—</div>
+        <button onclick="adjustRoll(1)" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:2px;cursor:pointer;font-size:16px;line-height:1">+</button>
+        <button onclick="clearRoll()" style="background:transparent;border:0.5px solid var(--border);color:var(--text-dim);height:32px;padding:0 10px;border-radius:2px;cursor:pointer;font-size:10px;font-family:var(--ff);letter-spacing:.08em">CLEAR</button>
+      </div>
+    </div>
+    <div id="roll-hint" style="font-size:10px;color:var(--text-dim);padding-top:14px">Enter your roll to see exactly which rooms you can reach.</div>
+  </div>
+  <div id="board-grid"></div>
+  <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;font-size:10px" id="board-legend"></div>
+  <hr class="div">
+  <div class="slbl" style="margin-bottom:8px">Player positions — manual override</div>
+  <div id="player-pos-controls"></div>
+</div>
+
+<!-- ════════════════════════════════ ANALYSIS ════ -->
+<div class="panel" id="panel-analysis">
+  <div id="token-card-an"></div>
+  <div class="meter">
+    <div>
+      <div class="meter-lbl">Valid combinations</div>
+      <div class="meter-num" id="c-count">324</div>
+    </div>
+    <div class="meter-right">
+      <div class="meter-lbl">Possibility space remaining &nbsp;<span id="c-pct" style="color:var(--text-muted)">100%</span></div>
+      <div class="bar-bg"><div class="bar-fill" id="c-bar" style="width:100%"></div></div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:8px" id="c-sub">6 suspect × 6 weapon × 9 room candidates</div>
+    </div>
+  </div>
+
+  <div class="hint">Cell shade = relative likelihood. Darker = more likely the solution. Equal shading = equal probability among remaining candidates.</div>
+
+  <div class="psec">
+    <div class="psec-hdr s">Suspects <span style="opacity:.5;font-weight:300;font-size:8px" id="s-cands"></span></div>
+    <div class="pgrid" id="prob-s"></div>
+  </div>
+  <div class="psec">
+    <div class="psec-hdr w">Weapons <span style="opacity:.5;font-weight:300;font-size:8px" id="w-cands"></span></div>
+    <div class="pgrid" id="prob-w"></div>
+  </div>
+  <div class="psec">
+    <div class="psec-hdr r">Rooms <span style="opacity:.5;font-weight:300;font-size:8px" id="r-cands"></span></div>
+    <div class="pgrid" id="prob-r"></div>
+  </div>
+
+  <div class="rec">
+    <div class="rec-lbl">Optimal next suggestion</div>
+    <div class="rec-body" id="rec-body">
+      <span style="font-size:11px;color:var(--text-dim)">Initialize game to see recommendation.</span>
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:8px" id="rec-why"></div>
+  </div>
+
+  <div style="margin-top:16px;background:var(--surface2);border:0.5px solid var(--border);border-left:2px solid var(--rm-text);border-radius:3px;padding:13px 16px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:var(--rm-text);margin-bottom:10px">Secret passages — no roll required</div>
+    <div style="display:flex;flex-direction:column;gap:8px" id="shortcut-display"></div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────── DATA ────────────────────────────
+const SUS = ['Homer','Marge','Bart','Lisa','Waylon Smithers','Krusty'];
+const WPN = ['Plutonium Rod','Slingshot','Necklace','Saxophone','Extendo Glove','Poisoned Doughnut'];
+const RMS = ['Krusty Loose Studios','Burns Manor','The Android\'s Dungeon','The Frying Dutchman','The Simpson House','Springfield Retirement Castle','Nuclear Power Plant','Kwik-E-Mart','Barney\'s Bowlarama'];
+const SHORTCUTS = [
+  ['Springfield Retirement Castle', 'Krusty Loose Studios'],
+  ['Kwik-E-Mart', "The Android's Dungeon"]
+];
+
+// Min steps between rooms (★ = secret passage = 1)
+const DIST = {
+  "The Android's Dungeon":        {"The Android's Dungeon":0,"Burns Manor":6,"Krusty Loose Studios":10,"The Frying Dutchman":5,"Barney's Bowlarama":13,"The Simpson House":9,"Springfield Retirement Castle":12,"Nuclear Power Plant":15,"Kwik-E-Mart":1},
+  "Burns Manor":                  {"The Android's Dungeon":6,"Burns Manor":0,"Krusty Loose Studios":4,"The Frying Dutchman":9,"Barney's Bowlarama":11,"The Simpson House":13,"Springfield Retirement Castle":17,"Nuclear Power Plant":12,"Kwik-E-Mart":17},
+  "Krusty Loose Studios":         {"The Android's Dungeon":10,"Burns Manor":4,"Krusty Loose Studios":0,"The Frying Dutchman":13,"Barney's Bowlarama":7,"The Simpson House":17,"Springfield Retirement Castle":1,"Nuclear Power Plant":14,"Kwik-E-Mart":13},
+  "The Frying Dutchman":          {"The Android's Dungeon":5,"Burns Manor":9,"Krusty Loose Studios":13,"The Frying Dutchman":0,"Barney's Bowlarama":8,"The Simpson House":4,"Springfield Retirement Castle":8,"Nuclear Power Plant":9,"Kwik-E-Mart":14},
+  "Barney's Bowlarama":           {"The Android's Dungeon":13,"Burns Manor":11,"Krusty Loose Studios":7,"The Frying Dutchman":8,"Barney's Bowlarama":0,"The Simpson House":10,"Springfield Retirement Castle":14,"Nuclear Power Plant":7,"Kwik-E-Mart":6},
+  "The Simpson House":            {"The Android's Dungeon":9,"Burns Manor":13,"Krusty Loose Studios":17,"The Frying Dutchman":4,"Barney's Bowlarama":10,"The Simpson House":0,"Springfield Retirement Castle":4,"Nuclear Power Plant":5,"Kwik-E-Mart":10},
+  "Springfield Retirement Castle":{"The Android's Dungeon":12,"Burns Manor":17,"Krusty Loose Studios":1,"The Frying Dutchman":8,"Barney's Bowlarama":14,"The Simpson House":4,"Springfield Retirement Castle":0,"Nuclear Power Plant":7,"Kwik-E-Mart":8},
+  "Nuclear Power Plant":          {"The Android's Dungeon":15,"Burns Manor":12,"Krusty Loose Studios":14,"The Frying Dutchman":9,"Barney's Bowlarama":7,"The Simpson House":5,"Springfield Retirement Castle":7,"Nuclear Power Plant":0,"Kwik-E-Mart":5},
+  "Kwik-E-Mart":                  {"The Android's Dungeon":1,"Burns Manor":17,"Krusty Loose Studios":13,"The Frying Dutchman":14,"Barney's Bowlarama":6,"The Simpson House":10,"Springfield Retirement Castle":8,"Nuclear Power Plant":5,"Kwik-E-Mart":0}
+};
+
+// Board grid positions [col 1-3, row 1-4, colSpan, rowSpan]
+const BOARD_POS = {
+  "The Android's Dungeon":         [1,1,1,1],
+  "Burns Manor":                   [2,1,1,1],
+  "Krusty Loose Studios":          [3,1,1,1],
+  "The Frying Dutchman":           [1,2,1,1],
+  "The Simpson House":             [1,3,1,1],
+  "Barney's Bowlarama":            [3,2,1,2],
+  "Springfield Retirement Castle": [1,4,1,1],
+  "Nuclear Power Plant":           [2,4,1,1],
+  "Kwik-E-Mart":                   [3,4,1,1]
+};
+
+const ALL = [...SUS,...WPN,...RMS];
+const CAT = {};
+SUS.forEach(c=>CAT[c]='s'); WPN.forEach(c=>CAT[c]='w'); RMS.forEach(c=>CAT[c]='r');
+
+function ck(c){ return c.toLowerCase().replace(/ /g,'-'); }
+function fc(k){ return ALL.find(c=>ck(c)===k); }
+
+const G = {
+  players:[], myCards:new Set(),
+  mat:{}, pending:[], sugs:[],
+  sol:{s:null, w:null, r:null},
+  myChar:null, startRoom:null, currentRoom:null, roll:null,
+  shown:[], // [{card, toPlayerIdx, turnNum}]
+  playerChars:{}, playerRooms:{},
+  ready:false
+};
+
+const PCOLS = ['#c9a84c','#a898e8','#e88080','#72c8b8','#e8c060','#a8d870'];
+
+// ────────────────────────── SETUP ────────────────────────────
+function buildSetup(){
+  const n = +document.getElementById('npl').value;
+  const charOpts = '<option value="">— char —</option>' + SUS.map(c=>`<option value="${c}">${c}</option>`).join('');
+  const roomOpts = '<option value="">— room —</option>' + RMS.map(r=>`<option value="${r}">${r}</option>`).join('');
+  let h = '';
+  for(let i=0;i<n;i++){
+    const col = PCOLS[i];
+    const isYou = i===0;
+    h += `<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:8px;flex-wrap:wrap;padding:8px 10px;background:var(--surface2);border:0.5px solid ${col}22;border-left:2px solid ${col};border-radius:3px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;margin-bottom:10px"></div>
+      <div class="field" style="flex:1;min-width:90px;margin:0"><label>${isYou?'You (P1)':`Player ${i+1}`}</label>
+        <input id="pn${i}" type="text" value="${isYou?'You':'Player '+(i+1)}"></div>
+      <div class="field" style="flex:1;min-width:120px;margin:0"><label>Character</label>
+        <select id="pc${i}">${charOpts}</select></div>
+      <div class="field" style="flex:1;min-width:160px;margin:0"><label>Starting room</label>
+        <select id="pr${i}">${roomOpts}</select></div>
+    </div>`;
+  }
+  document.getElementById('pname-inputs').innerHTML = h;
+}
+
+function buildChips(){
+  function mk(id, cards, cls){
+    document.getElementById(id).innerHTML = cards.map(c =>
+      `<div class="chip" data-c="${c}" onclick="toggleCard(this,'${cls}')">${c}</div>`
+    ).join('');
+  }
+  mk('ch-s', SUS, 'sus'); mk('ch-w', WPN, 'wpn'); mk('ch-r', RMS, 'rm');
+}
+
+function toggleCard(el, cls){
+  const c = el.dataset.c;
+  if(G.myCards.has(c)){ G.myCards.delete(c); el.className='chip'; }
+  else { G.myCards.add(c); el.className=`chip ${cls}`; }
+}
+
+function initGame(){
+  const n = +document.getElementById('npl').value;
+  G.players = [];
+  G.playerChars = {}; G.playerRooms = {};
+  for(let i=0;i<n;i++){
+    G.players.push(document.getElementById(`pn${i}`)?.value||`P${i+1}`);
+    G.playerChars[i] = document.getElementById(`pc${i}`)?.value || null;
+    G.playerRooms[i] = document.getElementById(`pr${i}`)?.value || null;
+  }
+  G.myChar    = G.playerChars[0];
+  G.startRoom = G.playerRooms[0];
+  G.currentRoom = G.startRoom;
+  G.mat={}; G.pending=[]; G.sugs=[]; G.shown=[]; G.sol={s:null,w:null,r:null}; G.ready=true;
+  G.players.forEach((_,pi)=>{ G.mat[pi]={}; ALL.forEach(c=>{ G.mat[pi][c]='?'; }); });
+  G.myCards.forEach(card=>{
+    G.mat[0][card]='Y';
+    for(let pi=1;pi<G.players.length;pi++) G.mat[pi][card]='N';
+  });
+  propagate();
+  updateStatusBar();
+  sw('analysis');
+}
+
+// ──────────────────────── PROPAGATION ────────────────────────
+function anyHolds(card){
+  return G.players.some((_,pi)=>G.mat[pi][card]==='Y');
+}
+
+function propagate(){
+  let changed = true;
+  let iters = 0;
+  while(changed && iters++ < 50){
+    changed = false;
+    // Y for one player → N for all others on same card
+    ALL.forEach(card=>{
+      G.players.forEach((_,pi)=>{
+        if(G.mat[pi][card]==='Y'){
+          G.players.forEach((_,pj)=>{
+            if(pj!==pi && G.mat[pj][card]==='?'){ G.mat[pj][card]='N'; changed=true; }
+          });
+        }
+      });
+    });
+    // All players N for a card → solution
+    ALL.forEach(card=>{
+      if(G.players.every((_,pi)=>G.mat[pi][card]==='N')){
+        const ct=CAT[card];
+        if(ct==='s' && !G.sol.s){ G.sol.s=card; changed=true; }
+        if(ct==='w' && !G.sol.w){ G.sol.w=card; changed=true; }
+        if(ct==='r' && !G.sol.r){ G.sol.r=card; changed=true; }
+      }
+    });
+    // Soft constraints: player has at least one of [A,B,C]
+    G.pending = G.pending.filter(({pi, cards})=>{
+      if(cards.some(c=>G.mat[pi][c]==='Y')) return false; // satisfied
+      const unk = cards.filter(c=>G.mat[pi][c]==='?');
+      if(unk.length===1){ G.mat[pi][unk[0]]='Y'; changed=true; return false; }
+      if(unk.length===0) return false; // impossible constraint, discard
+      return true;
+    });
+    // Known solution in category → remaining cards in that category must be held
+    ['s','w','r'].forEach(ct=>{
+      if(!G.sol[ct]) return;
+      const group = ct==='s'?SUS:ct==='w'?WPN:RMS;
+      group.filter(c=>c!==G.sol[ct]).forEach(card=>{
+        const ns = G.players.filter((_,pi)=>G.mat[pi][card]==='N').length;
+        const qs = G.players.filter((_,pi)=>G.mat[pi][card]==='?');
+        if(qs.length===1 && ns===G.players.length-1){
+          G.mat[G.players.indexOf(qs[0])][card]='Y'; changed=true;
+        }
+      });
+    });
+  }
+}
+
+// ─────────────────────── PROBABILITY ENGINE ──────────────────
+function getValidCombos(){
+  const cs = SUS.filter(c=>!anyHolds(c));
+  const cw = WPN.filter(c=>!anyHolds(c));
+  const cr = RMS.filter(c=>!anyHolds(c));
+  return {cs, cw, cr, total: cs.length * cw.length * cr.length};
+}
+
+function computeProbs(){
+  const {cs, cw, cr, total} = getValidCombos();
+  const probs = {}; ALL.forEach(c=>probs[c]=0);
+  if(total===0) return {probs, total};
+  // P(card = solution) = combos containing card / total combos
+  // For suspects: count = cw.length * cr.length  (if card is in cs)
+  cs.forEach(c=>probs[c] = (cw.length * cr.length) / total);
+  cw.forEach(c=>probs[c] = (cs.length * cr.length) / total);
+  cr.forEach(c=>probs[c] = (cs.length * cw.length) / total);
+  return {probs, total};
+}
+
+function adjustRoll(delta){
+  G.roll = Math.min(12, Math.max(1, (G.roll||0) + delta));
+  document.getElementById('roll-display').textContent = G.roll;
+  renderBoard();
+}
+
+function clearRoll(){
+  G.roll = null;
+  document.getElementById('roll-display').textContent = '—';
+  renderBoard();
+}
+
+function moveToRoom(room){
+  G.currentRoom = room || null;
+  G.roll = null; // clear roll when you move to a new room
+  const rd = document.getElementById('roll-display');
+  if(rd) rd.textContent = '—';
+  renderBoard();
+  renderAnalysis();
+  updateStatusBar();
+}
+
+function renderBoard(){
+  if(!G.ready){
+    document.getElementById('board-grid').innerHTML='<div style="font-size:11px;color:var(--text-dim);padding:20px">Initialize game first.</div>';
+    return;
+  }
+  renderTokenCard('board-token-card');
+
+  // Populate current room dropdown
+  const sel = document.getElementById('cur-room');
+  if(sel){
+    sel.innerHTML = '<option value="">— select room —</option>' + RMS.map(r=>`<option value="${r}" ${G.currentRoom===r?'selected':''}>${r}</option>`).join('');
+  }
+
+  const cur = G.currentRoom;
+  const distFromCur = cur && DIST[cur] ? DIST[cur] : null;
+  const roll = G.roll;
+
+  // Update roll hint
+  const hint = document.getElementById('roll-hint');
+  if(hint){
+    if(!cur) hint.textContent = 'Set your current room first.';
+    else if(!roll) hint.textContent = 'Enter your roll to see exactly which rooms you can reach this turn.';
+    else {
+      const reachable = RMS.filter(r=>r!==cur && distFromCur && distFromCur[r]<=roll);
+      hint.innerHTML = reachable.length
+        ? `With a roll of <span style="color:var(--gold);font-weight:500">${roll}</span> you can reach <span style="color:#a0d070;font-weight:500">${reachable.length}</span> room${reachable.length!==1?'s':''} this turn.`
+        : `With a roll of <span style="color:var(--gold);font-weight:500">${roll}</span> you can't reach any room this turn — stay in the hallway.`;
+    }
+  }
+
+  // Check secret passage partner
+  const passagePartner = cur ? (SHORTCUTS.find(p=>p[0]===cur)?.[1] || SHORTCUTS.find(p=>p[1]===cur)?.[0]) : null;
+
+  // Build CSS grid board
+  // Grid: 3 cols, 4 rows + gaps
+  const cells = {};
+  RMS.forEach(room=>{
+    const [col,row,cs,rs] = BOARD_POS[room];
+    const dist = distFromCur ? distFromCur[room] : null;
+    const isCur = room === cur;
+    const isPassage = room === passagePartner;
+    const isSol = G.sol.r === room;
+
+    let bg, borderStyle, textCol;
+    if(isCur){
+      bg='#2a2210'; borderStyle=`1.5px solid var(--gold)`;textCol='var(--gold)';
+    } else if(isPassage){
+      bg='#0e2a1a'; borderStyle=`1.5px dashed var(--rm-text)`;textCol='var(--rm-text)';
+    } else if(isSol){
+      bg='#1a1828'; borderStyle=`1px solid #5c4c94`;textCol='var(--sus-text)';
+    } else if(dist===null){
+      bg='var(--surface2)'; borderStyle='0.5px solid var(--border)';textCol='var(--text-muted)';
+    } else if(roll !== null){
+      // Roll known — exact reachability
+      if(dist<=roll){
+        bg='#1a3a1a'; borderStyle='1.5px solid #4c9c4c';textCol='#8ce48c'; // reachable!
+      } else {
+        bg='#1e1a17'; borderStyle='0.5px solid rgba(255,255,255,.06)';textCol='var(--text-dim)'; // out of range
+      }
+    } else {
+      // No roll — use distance bands
+      if(dist<=1){
+        bg='#1a3a1a'; borderStyle='1px solid #3c6c3c';textCol='#8ce48c';
+      } else if(dist<=6){
+        bg='#1e3010'; borderStyle='0.5px solid #4c6c2c';textCol='#a0d070';
+      } else if(dist<=12){
+        bg='#2a2810'; borderStyle='0.5px solid #5c5020';textCol='#c0a840';
+      } else {
+        bg='#2a1818'; borderStyle='0.5px solid #5c2828';textCol='#c07070';
+      }
+    }
+
+    const distLabel = dist===null?''
+      : dist===0?`<div style="font-size:9px;margin-top:4px;opacity:.7">you are here</div>`
+      : dist===1&&isPassage?`<div style="font-size:9px;margin-top:4px;color:var(--rm-text)">⟷ secret passage</div>`
+      : roll!==null ? (dist<=roll
+          ? `<div style="font-size:10px;font-weight:500;margin-top:4px;color:#8ce48c">✓ reachable &nbsp;(${dist} steps)</div>`
+          : `<div style="font-size:10px;margin-top:4px;color:var(--text-dim)">${dist} steps &nbsp;(need ${dist-roll} more)</div>`)
+      : `<div style="font-size:11px;font-weight:500;margin-top:4px;color:${textCol}">${dist} steps</div>`;
+
+    const solBadge = isSol?`<div style="font-size:9px;color:var(--sus-text);margin-top:2px">★ solution?</div>`:'';
+    const passageBadge = isPassage?`<div style="font-size:9px;color:var(--rm-text);margin-top:2px">⟷ passage here</div>`:'';
+
+    // Player tokens in this room
+    const tokens = G.players.map((pname,pi)=>{
+      if(G.playerRooms[pi]!==room) return '';
+      const col = PCOLS[pi];
+      const initials = pname.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      const char = G.playerChars[pi]||'';
+      return `<div title="${pname}${char?' ('+char+')':''}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${col};color:#111;font-size:9px;font-weight:600;margin:1px;border:1px solid rgba(255,255,255,.2)">${initials}</div>`;
+    }).join('');
+    const tokenRow = tokens ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:5px">${tokens}</div>` : '';
+
+    cells[room] = `<div onclick="moveToRoom('${room.replace(/'/g,"\\'")}')"
+      style="grid-column:${col}/span ${cs};grid-row:${row}/span ${rs};
+             background:${bg};border:${borderStyle};border-radius:4px;
+             padding:10px;cursor:pointer;transition:all .15s;min-height:80px;
+             display:flex;flex-direction:column;justify-content:flex-start"
+      onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter=''">
+      <div style="font-size:11px;font-weight:500;color:${textCol}">${room}</div>
+      ${distLabel}${solBadge}${passageBadge}${tokenRow}
+    </div>`;
+  });
+
+  // Hallway center cells (rows 2-3, col 2)
+  const hallCell = (r) => `<div style="grid-column:2;grid-row:${r};background:var(--surface);border:0.5px solid rgba(255,255,255,.04);border-radius:4px;display:flex;align-items:center;justify-content:center">
+    <span style="font-size:9px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase">hallway</span>
+  </div>`;
+
+  const legendEl = document.getElementById('board-legend');
+  if(legendEl){
+    legendEl.innerHTML = roll!==null ? `
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#1a3a1a;border:1px solid #4c9c4c;border-radius:2px"></div><span style="color:var(--text-dim)">Reachable with roll of ${roll}</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#1e1a17;border-radius:2px"></div><span style="color:var(--text-dim)">Out of range this turn</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#2a2210;border:0.5px solid var(--gold-dim);border-radius:2px"></div><span style="color:var(--text-dim)">You are here</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="color:var(--rm-text);font-size:12px">⟷</span><span style="color:var(--text-dim)">Secret passage (free)</span></div>
+    ` : `
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#1e3010;border-radius:2px"></div><span style="color:var(--text-dim)">Likely reachable (≤6 steps)</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#2a2810;border-radius:2px"></div><span style="color:var(--text-dim)">2 turns (7–12 steps)</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#2a1818;border-radius:2px"></div><span style="color:var(--text-dim)">Far (13+ steps)</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;background:#2a2210;border:0.5px solid var(--gold-dim);border-radius:2px"></div><span style="color:var(--text-dim)">You are here</span></div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="color:var(--rm-text);font-size:12px">⟷</span><span style="color:var(--text-dim)">Secret passage (free)</span></div>
+    `;
+  }
+
+  // ── Player position manual controls ─────────────────
+  const ppc = document.getElementById('player-pos-controls');
+  if(ppc){
+    ppc.innerHTML = G.players.map((pname,pi)=>{
+      const col = PCOLS[pi];
+      const char = G.playerChars[pi]||'';
+      const curRm = G.playerRooms[pi]||'';
+      const opts = RMS.map(r=>`<option value="${r}" ${curRm===r?'selected':''}>${r}</option>`).join('');
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;min-width:140px;flex-shrink:0">
+          <div style="width:10px;height:10px;border-radius:50%;background:${col}"></div>
+          <span style="font-size:11px;color:${col}">${pname}</span>
+          ${char?`<span style="font-size:9px;color:var(--text-dim)">(${char})</span>`:''}
+        </div>
+        <div class="field" style="flex:1;min-width:180px;margin:0">
+          <select onchange="setPlayerRoom(${pi},this.value)">
+            <option value="" ${!curRm?'selected':''}>— hallway / off board —</option>
+            ${opts}
+          </select>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('board-grid').innerHTML =
+    `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:repeat(4,auto);gap:5px;max-width:680px">
+      ${RMS.map(r=>cells[r]).join('')}
+      ${hallCell(2)}${hallCell(3)}
+    </div>`;
+}
+
+function setPlayerRoom(pi, room){
+  G.playerRooms[pi] = room || null;
+  if(pi===0){ G.currentRoom = room||null; }
+  renderBoard();
+  updateStatusBar();
+}
+
+function renderBoard_noop(){} // placeholder
+
+function bestSuggestion(){
+  if(!G.ready) return null;
+  const {cs, cw, cr} = getValidCombos();
+  if(!cs.length||!cw.length||!cr.length) return null;
+  function unkScore(card){ return G.players.filter((_,pi)=>G.mat[pi][card]==='?').length; }
+  // Score each candidate room by info value minus distance penalty
+  const distFromCur = G.currentRoom && DIST[G.currentRoom] ? DIST[G.currentRoom] : null;
+  function roomScore(room){
+    const infoVal = unkScore(room) * 3;
+    if(!distFromCur) return infoVal;
+    const d = distFromCur[room] || 0;
+    const distPenalty = d <= 1 ? 0 : d <= 6 ? 1 : d <= 12 ? 3 : 6;
+    return infoVal - distPenalty;
+  }
+  const byUnk = arr => arr.slice().sort((a,b)=>unkScore(b)-unkScore(a));
+  const byRoomScore = rooms => rooms.slice().sort((a,b)=>roomScore(b)-roomScore(a));
+  const bs = byUnk(cs)[0];
+  const bw = byUnk(cw)[0];
+  const br = byRoomScore(cr)[0];
+  const dist = distFromCur ? distFromCur[br] : null;
+  const score = unkScore(bs) + unkScore(bw) + unkScore(br);
+  return {s:bs, w:bw, r:br, score, dist};
+}
+
+// ─────────────────────────── RENDER ──────────────────────────
+function sw(t){
+  const ids = ['setup','matrix','log','board','analysis'];
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active', ids[i]===t));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+t).classList.add('active');
+  if(t==='matrix')   renderMatrix();
+  if(t==='analysis') renderAnalysis();
+  if(t==='log')      renderLogForm();
+  if(t==='board')    renderBoard();
+}
+
+function updateStatusBar(){
+  if(!G.ready){ return; }
+  const {total, cs, cw, cr} = getValidCombos();
+  const solved = G.sol.s && G.sol.w && G.sol.r;
+  const bar = document.getElementById('status-bar');
+  bar.innerHTML = `
+    ${G.myChar?`<div class="stat-pill"><div class="stat-dot sus"></div><span class="stat-txt">Playing as: </span><span class="stat-val">${G.myChar}</span></div>`:''}
+    ${G.currentRoom?`<div class="stat-pill"><div class="stat-dot rm"></div><span class="stat-txt">Currently in: </span><span class="stat-val">${G.currentRoom}</span></div>`:G.startRoom?`<div class="stat-pill"><div class="stat-dot rm"></div><span class="stat-txt">Started in: </span><span class="stat-val">${G.startRoom}</span></div>`:''}
+    <div class="stat-pill"><div class="stat-dot gold"></div><span class="stat-txt">Combos: </span><span class="stat-val">${total}</span></div>
+    <div class="stat-pill"><div class="stat-dot sus"></div><span class="stat-txt">Suspects: </span><span class="stat-val">${cs.length}</span></div>
+    <div class="stat-pill"><div class="stat-dot wpn"></div><span class="stat-txt">Weapons: </span><span class="stat-val">${cw.length}</span></div>
+    <div class="stat-pill"><div class="stat-dot rm"></div><span class="stat-txt">Rooms: </span><span class="stat-val">${cr.length}</span></div>
+    <div class="stat-pill"><div class="stat-dot"></div><span class="stat-txt">Suggestions logged: </span><span class="stat-val">${G.sugs.length}</span></div>
+    ${solved?`<div class="stat-pill"><div class="stat-dot gold"></div><span class="stat-txt">SOLVED</span></div>`:''}
+  `;
+}
+
+function renderShortcuts(id, compact){
+  const el = document.getElementById(id); if(!el) return;
+  if(compact){
+    el.innerHTML = SHORTCUTS.map(([a,b])=>
+      `<div style="background:var(--rm-bg);border:0.5px solid #3c7c7444;border-radius:3px;padding:6px 12px;display:flex;align-items:center;gap:8px;font-size:10px;color:var(--rm-text)">
+        <span>${a}</span>
+        <span style="color:var(--text-dim);font-size:12px">⟷</span>
+        <span>${b}</span>
+        <span style="font-size:9px;color:var(--text-dim);margin-left:4px">no roll</span>
+      </div>`
+    ).join('');
+  } else {
+    el.innerHTML = SHORTCUTS.map(([a,b])=>
+      `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="background:var(--rm-bg);border:0.5px solid #3c7c7444;border-radius:3px;padding:7px 14px;font-size:11px;color:var(--rm-text)">${a}</div>
+        <div style="font-size:18px;color:var(--text-dim)">⟷</div>
+        <div style="background:var(--rm-bg);border:0.5px solid #3c7c7444;border-radius:3px;padding:7px 14px;font-size:11px;color:var(--rm-text)">${b}</div>
+      </div>`
+    ).join('');
+  }
+}
+
+function renderTokenCard(id){
+  const el = document.getElementById(id); if(!el||!G.ready) return;
+  const char = G.myChar || '—';
+  const room = G.startRoom || '—';
+  el.innerHTML = `<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+    <div style="background:var(--sus-bg);border:0.5px solid #5c4c9444;border-radius:3px;padding:10px 16px;display:flex;flex-direction:column;gap:3px;min-width:160px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#6c5ca4">Playing as</div>
+      <div style="font-family:var(--fd);font-size:16px;color:var(--sus-text);font-weight:600">${char}</div>
+    </div>
+    <div style="background:var(--rm-bg);border:0.5px solid #3c7c7444;border-radius:3px;padding:10px 16px;display:flex;flex-direction:column;gap:3px;min-width:200px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#2c8c7c">Starting room</div>
+      <div style="font-family:var(--fd);font-size:16px;color:var(--rm-text);font-weight:600">${room}</div>
+    </div>
+  </div>`;
+}
+
+function renderSolRow(id){
+  const el = document.getElementById(id); if(!el) return;
+  el.innerHTML = ['s','w','r'].map(k=>{
+    const labels={s:'Suspect',w:'Weapon',r:'Room'};
+    const v = G.sol[k];
+    return `<div class="sol-card ${v?'known':''}">
+      <div class="lbl">${labels[k]}</div>
+      <div class="val">${v||'—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderMatrix(){
+  if(!G.ready) return;
+  renderTokenCard('token-card-mx');
+  renderSolRow('sg-mx');
+  renderShortcuts('shortcut-mx', true);
+  const tbl = document.getElementById('mxtbl');
+  let h = '<thead><tr><th></th>';
+  h += `<th colspan="${SUS.length}" class="cat-s">Suspects</th>`;
+  h += `<th colspan="${WPN.length}" class="cat-w">Weapons</th>`;
+  h += `<th colspan="${RMS.length}" class="cat-r">Rooms</th>`;
+  h += '</tr><tr><th></th>';
+  ALL.forEach(card=>{
+    const c = CAT[card];
+    h += `<th class="hc ${c}">${card}</th>`;
+  });
+  h += '</tr></thead><tbody>';
+  G.players.forEach((p,pi)=>{
+    h += `<tr><td class="plbl">${p}</td>`;
+    ALL.forEach(card=>{
+      const v = G.mat[pi][card];
+      const isSol = G.sol.s===card || G.sol.w===card || G.sol.r===card;
+      if(isSol)       h += `<td class="csol">★</td>`;
+      else if(v==='Y') h += `<td class="cy">✓</td>`;
+      else if(v==='N') h += `<td class="cn">✗</td>`;
+      else             h += `<td class="cq">·</td>`;
+    });
+    h += '</tr>';
+  });
+  h += `<tr><td class="plbl" style="color:var(--text-dim);font-style:italic;font-size:9px">solution?</td>`;
+  ALL.forEach(card=>{
+    const isSol = G.sol.s===card || G.sol.w===card || G.sol.r===card;
+    h += isSol ? `<td class="csol">★</td>` : `<td class="cq"></td>`;
+  });
+  h += '</tr></tbody>';
+  tbl.innerHTML = h;
+}
+
+function renderAnalysis(){
+  if(!G.ready){
+    document.getElementById('c-count').textContent='—';
+    return;
+  }
+  renderTokenCard('token-card-an');
+  renderShortcuts('shortcut-display', false);
+  const {probs, total} = computeProbs();
+  const {cs, cw, cr} = getValidCombos();
+
+  // Meter
+  const pct = Math.round(total/324*100);
+  document.getElementById('c-count').textContent = total;
+  document.getElementById('c-pct').textContent = pct+'%';
+  document.getElementById('c-bar').style.width = pct+'%';
+  document.getElementById('c-sub').textContent =
+    `${cs.length} suspect × ${cw.length} weapon × ${cr.length} room candidate${cs.length!==1?'s':''}`;
+  document.getElementById('s-cands').textContent = cs.length===1?'1 candidate':cs.length+' candidates';
+  document.getElementById('w-cands').textContent = cw.length===1?'1 candidate':cw.length+' candidates';
+  document.getElementById('r-cands').textContent = cr.length===1?'1 candidate':cr.length+' candidates';
+
+  function renderProbGrid(gridId, cards, solKey){
+    const el = document.getElementById(gridId);
+    const solCard = G.sol[solKey];
+    const candidates = cards.filter(c=>!anyHolds(c));
+    const maxP = candidates.length>0 ? Math.max(...candidates.map(c=>probs[c]||0)) : 1;
+
+    el.innerHTML = cards.map(card=>{
+      const p = probs[card]||0;
+      const held = anyHolds(card);
+      const isSol = solCard===card;
+
+      if(isSol){
+        return `<div class="pcell confirmed">
+          <div class="pname">${card}</div>
+          <div class="pval">100<span class="punit">%</span></div>
+        </div>`;
+      }
+      if(held || p===0){
+        return `<div class="pcell out">
+          <div class="pname">${card}</div>
+          <div class="pval">0<span class="punit">%</span></div>
+        </div>`;
+      }
+      // Candidate: grayscale where darker = more likely
+      const rel = maxP>0 ? p/maxP : 0;
+      const L = Math.round(75 - rel*58);          // 75% = lightest, 17% = darkest
+      const tL = L < 46 ? 92 : 8;                 // text: white on dark, near-black on light
+      const dispPct = candidates.length > 0 ? Math.round(100/candidates.length) : 0;
+      return `<div class="pcell" style="background:hsl(0,0%,${L}%);border-color:hsl(0,0%,${L+8}%)">
+        <div class="pname" style="color:hsl(0,0%,${tL}%)">${card}</div>
+        <div class="pval" style="color:hsl(0,0%,${tL}%)">${dispPct}<span class="punit" style="color:hsl(0,0%,${tL}%)">%</span></div>
+      </div>`;
+    }).join('');
+  }
+
+  renderProbGrid('prob-s', SUS, 's');
+  renderProbGrid('prob-w', WPN, 'w');
+  renderProbGrid('prob-r', RMS, 'r');
+
+  // Recommendation
+  const rec = bestSuggestion();
+  const recEl = document.getElementById('rec-body');
+  const recWhy = document.getElementById('rec-why');
+  if(G.sol.s && G.sol.w && G.sol.r){
+    recEl.innerHTML = `<span style="color:var(--gold);font-size:12px">Solution identified — accuse now!</span>
+      <span class="badge bs">${G.sol.s}</span>
+      <span class="badge bw">${G.sol.w}</span>
+      <span class="badge br">${G.sol.r}</span>`;
+    recWhy.textContent = '';
+  } else if(rec){
+    const distNote = rec.dist===null?'' : rec.dist<=1?`<span style="font-size:10px;color:#8ce48c;margin-left:6px">⟷ passage / here</span>`
+      : rec.dist<=6?`<span style="font-size:10px;color:#a0d070;margin-left:6px">${rec.dist} steps away</span>`
+      : `<span style="font-size:10px;color:#c0a840;margin-left:6px">${rec.dist} steps away</span>`;
+    recEl.innerHTML = `<span style="font-size:10px;color:var(--text-dim);margin-right:4px">Suggest:</span>
+      <span class="badge bs">${rec.s}</span>
+      <span class="badge bw">${rec.w}</span>
+      <span class="badge br">${rec.r}</span>${distNote}`;
+    recWhy.textContent = `Room selected for max deduction value balanced against travel distance from your current position.`;
+  } else {
+    recEl.innerHTML = '<span style="font-size:11px;color:var(--text-dim)">No candidates remaining to suggest.</span>';
+    recWhy.textContent = '';
+  }
+
+  updateStatusBar();
+}
+
+// ──────────────────────── LOG FORM ────────────────────────────
+function renderLogForm(){
+  if(!G.ready){
+    document.getElementById('log-inner').innerHTML =
+      '<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:24px">Initialize game from Setup first.</div>';
+    return;
+  }
+  const whoEl = document.getElementById('s-who');
+  if(whoEl) whoEl.innerHTML = G.players.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
+  const pop = (id, arr) => {
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = arr.map(v=>`<option value="${v}">${v}</option>`).join('');
+  };
+  pop('s-sus', SUS); pop('s-wpn', WPN); pop('s-rm', RMS);
+  buildResps();
+  renderSugHist();
+  renderShowHistory();
+}
+
+function buildResps(){
+  const si = +(document.getElementById('s-who')?.value||0);
+  const cardOpts = `<option value="skip">— (not in sequence)</option>
+    <option value="pass">Passed (no card)</option>
+    <option value="showed">Showed a card (unknown)</option>`
+    + ALL.map(c=>`<option value="x-${ck(c)}">Showed: ${c}</option>`).join('');
+  document.getElementById('resp-rows').innerHTML = G.players.map((p,pi)=>{
+    if(pi===si) return '';
+    return `<div class="rr">
+      <span class="pn">${p}</span>
+      <div class="field" style="flex:1;margin:0"><select id="r${pi}">${cardOpts}</select></div>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('change', e=>{ if(e.target.id==='s-who') buildResps(); });
+
+function logSug(){
+  if(!G.ready) return;
+  const si  = +document.getElementById('s-who').value;
+  const sus = document.getElementById('s-sus').value;
+  const wpn = document.getElementById('s-wpn').value;
+  const rm  = document.getElementById('s-rm').value;
+  const cards = [sus, wpn, rm];
+  const resps = [];
+  G.players.forEach((_,pi)=>{
+    if(pi===si) return;
+    const sel = document.getElementById('r'+pi);
+    if(!sel || sel.value==='skip') return;
+    resps.push({pi, result:sel.value});
+  });
+  resps.forEach(({pi,result})=>{
+    if(result==='pass'){
+      cards.forEach(c=>{ if(G.mat[pi][c]==='?') G.mat[pi][c]='N'; });
+    } else if(result==='showed'){
+      if(!cards.some(c=>G.mat[pi][c]==='Y'))
+        G.pending.push({pi, cards:[...cards]});
+    } else if(result.startsWith('x-')){
+      const card = fc(result.slice(2));
+      if(card) G.mat[pi][card]='Y';
+    }
+  });
+  G.sugs.push({si, sus, wpn, rm, resps});
+
+  // ── Move tokens ─────────────────────────────────────
+  // Suggester moves to the room they suggested in
+  G.playerRooms[si] = rm;
+  if(si===0){ G.currentRoom = rm; }
+
+  // The named suspect's player also gets dragged to that room
+  const suspPi = Object.keys(G.playerChars).map(Number).find(pi=>G.playerChars[pi]===sus);
+  if(suspPi !== undefined && suspPi !== si){
+    G.playerRooms[suspPi] = rm;
+    if(suspPi===0){ G.currentRoom = rm; }
+  }
+  // ────────────────────────────────────────────────────
+  propagate();
+  renderMatrix(); renderAnalysis(); renderSugHist(); renderShowHistory();
+  if(document.getElementById('panel-board').classList.contains('active')) renderBoard();
+  buildResps();
+
+  // Trigger show advisor if another player suggested and you hold matching cards
+  if(si !== 0){
+    const matchingCards = cards.filter(c=>G.myCards.has(c));
+    if(matchingCards.length > 0){
+      renderShowAdvisor(cards, si);
+    } else {
+      renderShowAdvisor(null, null);
+    }
+  } else {
+    renderShowAdvisor(null, null);
+  }
+}
+
+function renderSugHist(){
+  const el = document.getElementById('sug-hist'); if(!el) return;
+  if(!G.sugs.length){
+    el.innerHTML='<div style="font-size:10px;color:var(--text-dim)">No suggestions logged yet.</div>';
+    return;
+  }
+  el.innerHTML = G.sugs.slice().reverse().map((sg,ri)=>{
+    const idx = G.sugs.length - ri;
+    const rstr = sg.resps.map(r=>{
+      const n = G.players[r.pi];
+      if(r.result==='pass')   return `<span class="badge bp">${n}: pass</span>`;
+      if(r.result==='showed') return `<span class="badge bsh">${n}: showed (?)</span>`;
+      const c = fc(r.result.slice(2));
+      return `<span class="badge bsh">${n}: ${c||r.result}</span>`;
+    }).join('');
+    const movedNote = (() => {
+      const suggesterName = G.players[sg.si];
+      const suspPi = Object.keys(G.playerChars).map(Number).find(pi=>G.playerChars[pi]===sg.sus);
+      const suspName = suspPi!==undefined ? G.players[suspPi] : null;
+      const parts = [`${suggesterName} → ${sg.rm}`];
+      if(suspName && suspPi!==sg.si) parts.push(`${suspName} dragged → ${sg.rm}`);
+      return `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;border-top:0.5px solid var(--border);padding-top:4px">${parts.map(p=>`<span style="margin-right:10px">⟶ ${p}</span>`).join('')}</div>`;
+    })();
+    return `<div class="sug">
+      <div class="snum">#${idx} — ${G.players[sg.si]}</div>
+      <div style="margin-bottom:4px">
+        <span class="badge bs">${sg.sus}</span>
+        <span class="badge bw">${sg.wpn}</span>
+        <span class="badge br">${sg.rm}</span>
+      </div>
+      <div>${rstr||'<span style="font-size:10px;color:var(--text-dim)">no responses recorded</span>'}</div>
+      ${movedNote}
+    </div>`;
+  }).join('');
+}
+
+// ──────────────────────── SHOW TRACKER ────────────────────────
+function recordShow(card, toPlayerIdx){
+  G.shown.push({card, toPlayerIdx, turnNum: G.sugs.length});
+  renderShowHistory();
+  renderShowAdvisor(null, null); // clear advisor
+}
+
+function getShowRecommendation(matchingCards, toPlayerIdx){
+  // Priority 1: card already shown to THIS player before
+  const shownToThis = G.shown.filter(s=>s.toPlayerIdx===toPlayerIdx);
+  const alreadyShownToThem = matchingCards.filter(c=>shownToThis.some(s=>s.card===c));
+  if(alreadyShownToThem.length>0){
+    // Pick the one shown most to them
+    const best = alreadyShownToThem.sort((a,b)=>{
+      const ca = shownToThis.filter(s=>s.card===a).length;
+      const cb = shownToThis.filter(s=>s.card===b).length;
+      return cb-ca;
+    })[0];
+    return {card:best, reason:'already shown to this player'};
+  }
+  // Priority 2: card shown to the MOST other players overall (most exposed = least damage to show again)
+  const showCounts = matchingCards.map(c=>({c, count:G.shown.filter(s=>s.card===c).length}));
+  showCounts.sort((a,b)=>b.count-a.count);
+  if(showCounts[0].count>0){
+    return {card:showCounts[0].c, reason:'most widely shown already (least new info)'};
+  }
+  // Priority 3: never shown anything — pick the card in the category with fewer candidates (reveals less about solution)
+  const candCounts = matchingCards.map(c=>{
+    const cat=CAT[c];
+    const group=cat==='s'?SUS:cat==='w'?WPN:RMS;
+    const cands=group.filter(gc=>!anyHolds(gc)).length;
+    return {c, cands};
+  });
+  candCounts.sort((a,b)=>b.cands-a.cands); // more candidates = less revealing
+  return {card:candCounts[0].c, reason:'reveals least about the solution'};
+}
+
+function renderShowAdvisor(cards, suggesterIdx){
+  const el = document.getElementById('show-advisor');
+  if(!el) return;
+  if(!cards || cards.length===0){
+    el.innerHTML='';
+    return;
+  }
+  const matchingCards = cards.filter(c=>G.myCards.has(c));
+  if(matchingCards.length===0){
+    el.innerHTML=`<div style="background:var(--surface2);border:0.5px solid var(--border);border-radius:3px;padding:10px 14px;margin-top:6px">
+      <div style="font-size:10px;color:var(--text-dim)">You don't hold any of these cards — pass.</div>
+    </div>`;
+    return;
+  }
+  const rec = getShowRecommendation(matchingCards, suggesterIdx);
+  const suggesterName = G.players[suggesterIdx];
+  // Show history for each matching card
+  const cardDetails = matchingCards.map(c=>{
+    const timesShown = G.shown.filter(s=>s.card===c).length;
+    const shownTo = [...new Set(G.shown.filter(s=>s.card===c).map(s=>G.players[s.toPlayerIdx]))];
+    const isRec = c===rec.card;
+    const bg = isRec?'#1a2a10':'var(--surface3)';
+    const border = isRec?'1px solid #4c8c2c':'0.5px solid var(--border)';
+    const catCls = CAT[c]==='s'?'bs':CAT[c]==='w'?'bw':'br';
+    return `<div style="background:${bg};border:${border};border-radius:3px;padding:8px 12px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap">
+      <div>
+        <span class="badge ${catCls}">${c}</span>
+        ${isRec?'<span style="font-size:9px;color:#8ce48c;margin-left:4px">★ recommended</span>':''}
+        <div style="font-size:10px;color:var(--text-dim);margin-top:3px">
+          ${timesShown===0?'Never shown before':`Shown ${timesShown}× before${shownTo.length?` (to ${shownTo.join(', ')})`:''}`}
+          ${isRec?`<span style="color:#a0d070"> — ${rec.reason}</span>`:''}
+        </div>
+      </div>
+      <button onclick="recordShow('${c.replace(/'/g,"\\'")}',${suggesterIdx})"
+        style="background:transparent;border:0.5px solid ${isRec?'#4c8c2c':'var(--border)'};color:${isRec?'#8ce48c':'var(--text-muted)'};font-family:var(--ff);font-size:10px;padding:5px 12px;border-radius:2px;cursor:pointer;white-space:nowrap">
+        Show this card
+      </button>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`<div style="background:var(--surface2);border:0.5px solid var(--border);border-left:2px solid #4c8c2c;border-radius:3px;padding:12px 14px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#8ce48c;margin-bottom:8px">
+      You need to disprove — show a card to ${suggesterName}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">${cardDetails}</div>
+  </div>`;
+}
+
+function renderShowHistory(){
+  const el = document.getElementById('show-history');
+  if(!el) return;
+  if(!G.shown.length){
+    el.innerHTML='<div style="font-size:10px;color:var(--text-dim)">No cards shown yet.</div>';
+    return;
+  }
+  // Group by card
+  const byCard = {};
+  G.shown.forEach(s=>{
+    if(!byCard[s.card]) byCard[s.card]={card:s.card, shows:[]};
+    byCard[s.card].shows.push(s);
+  });
+  el.innerHTML = Object.values(byCard).map(({card, shows})=>{
+    const catCls = CAT[card]==='s'?'bs':CAT[card]==='w'?'bw':'br';
+    const playersShownTo = {};
+    shows.forEach(s=>{
+      const name = G.players[s.toPlayerIdx];
+      playersShownTo[name] = (playersShownTo[name]||0)+1;
+    });
+    const playerList = Object.entries(playersShownTo).map(([name,count])=>
+      `<span style="font-size:10px;color:var(--text-muted)">${name}${count>1?` ×${count}`:''}</span>`
+    ).join(', ');
+    return `<div style="background:var(--surface2);border:0.5px solid var(--border);border-radius:3px;padding:8px 12px;margin-bottom:5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="badge ${catCls}">${card}</span>
+      <span style="font-size:10px;color:var(--text-dim)">shown ${shows.length}× to:</span>
+      ${playerList}
+    </div>`;
+  }).join('');
+}
+
+// ──────────────────────────── INIT ────────────────────────────
+buildSetup();
+buildChips();
+renderShortcuts('shortcut-display', false);
+</script>
+</body>
+</html>
