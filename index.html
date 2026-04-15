@@ -167,6 +167,15 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
 .voice-toast .vt-heard{color:var(--text-dim);font-size:10px;margin-bottom:4px}
 .voice-toast .vt-action{color:var(--gold);font-weight:500}
 .voice-toast .vt-error{color:#e88080}
+
+/* ── EDITION TOGGLE ── */
+.ed-toggle{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0}
+.ed-toggle input{opacity:0;width:0;height:0}
+.ed-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--surface3);border:0.5px solid var(--border);border-radius:10px;transition:.2s}
+.ed-slider:before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:var(--gold);border-radius:50%;transition:.2s}
+.ed-toggle input:checked + .ed-slider:before{transform:translateX(16px)}
+.ed-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);transition:color .2s;cursor:pointer}
+.ed-lbl.ed-active{color:var(--gold)}
 </style>
 </head>
 <body>
@@ -174,6 +183,11 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
 <div class="hdr">
   <h1>Clue</h1>
   <span class="sub">Deduction Engine</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <span class="ed-lbl" id="ed-classic" onclick="document.getElementById('ed-switch').checked=false;switchEdition()">Classic</span>
+    <label class="ed-toggle"><input type="checkbox" id="ed-switch" checked onchange="switchEdition()"><span class="ed-slider"></span></label>
+    <span class="ed-lbl ed-active" id="ed-simpsons" onclick="document.getElementById('ed-switch').checked=true;switchEdition()">Simpsons</span>
+  </div>
 </div>
 
 <div class="status-bar" id="status-bar">
@@ -337,43 +351,91 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
 
 <script>
 // ─────────────────────────── DATA ────────────────────────────
-const SUS = ['Homer','Marge','Bart','Lisa','Waylon Smithers','Krusty'];
-const WPN = ['Plutonium Rod','Slingshot','Necklace','Saxophone','Extendo Glove','Poisoned Doughnut'];
-const RMS = ['Krusty Loose Studios','Burns Manor','The Android\'s Dungeon','The Frying Dutchman','The Simpson House','Springfield Retirement Castle','Nuclear Power Plant','Kwik-E-Mart','Barney\'s Bowlarama'];
-const SHORTCUTS = [
-  ['Springfield Retirement Castle', 'Krusty Loose Studios'],
-  ['Kwik-E-Mart', "The Android's Dungeon"]
-];
-
-// Min steps between rooms (★ = secret passage = 1)
-const DIST = {
-  "The Android's Dungeon":        {"The Android's Dungeon":0,"Burns Manor":6,"Krusty Loose Studios":10,"The Frying Dutchman":5,"Barney's Bowlarama":13,"The Simpson House":9,"Springfield Retirement Castle":12,"Nuclear Power Plant":15,"Kwik-E-Mart":1},
-  "Burns Manor":                  {"The Android's Dungeon":6,"Burns Manor":0,"Krusty Loose Studios":4,"The Frying Dutchman":9,"Barney's Bowlarama":11,"The Simpson House":13,"Springfield Retirement Castle":17,"Nuclear Power Plant":12,"Kwik-E-Mart":17},
-  "Krusty Loose Studios":         {"The Android's Dungeon":10,"Burns Manor":4,"Krusty Loose Studios":0,"The Frying Dutchman":13,"Barney's Bowlarama":7,"The Simpson House":17,"Springfield Retirement Castle":1,"Nuclear Power Plant":14,"Kwik-E-Mart":13},
-  "The Frying Dutchman":          {"The Android's Dungeon":5,"Burns Manor":9,"Krusty Loose Studios":13,"The Frying Dutchman":0,"Barney's Bowlarama":8,"The Simpson House":4,"Springfield Retirement Castle":8,"Nuclear Power Plant":9,"Kwik-E-Mart":14},
-  "Barney's Bowlarama":           {"The Android's Dungeon":13,"Burns Manor":11,"Krusty Loose Studios":7,"The Frying Dutchman":8,"Barney's Bowlarama":0,"The Simpson House":10,"Springfield Retirement Castle":14,"Nuclear Power Plant":7,"Kwik-E-Mart":6},
-  "The Simpson House":            {"The Android's Dungeon":9,"Burns Manor":13,"Krusty Loose Studios":17,"The Frying Dutchman":4,"Barney's Bowlarama":10,"The Simpson House":0,"Springfield Retirement Castle":4,"Nuclear Power Plant":5,"Kwik-E-Mart":10},
-  "Springfield Retirement Castle":{"The Android's Dungeon":12,"Burns Manor":17,"Krusty Loose Studios":1,"The Frying Dutchman":8,"Barney's Bowlarama":14,"The Simpson House":4,"Springfield Retirement Castle":0,"Nuclear Power Plant":7,"Kwik-E-Mart":8},
-  "Nuclear Power Plant":          {"The Android's Dungeon":15,"Burns Manor":12,"Krusty Loose Studios":14,"The Frying Dutchman":9,"Barney's Bowlarama":7,"The Simpson House":5,"Springfield Retirement Castle":7,"Nuclear Power Plant":0,"Kwik-E-Mart":5},
-  "Kwik-E-Mart":                  {"The Android's Dungeon":1,"Burns Manor":17,"Krusty Loose Studios":13,"The Frying Dutchman":14,"Barney's Bowlarama":6,"The Simpson House":10,"Springfield Retirement Castle":8,"Nuclear Power Plant":5,"Kwik-E-Mart":0}
+const EDITIONS = {
+  simpsons: {
+    SUS: ['Homer','Marge','Bart','Lisa','Waylon Smithers','Krusty'],
+    WPN: ['Plutonium Rod','Slingshot','Necklace','Saxophone','Extendo Glove','Poisoned Doughnut'],
+    RMS: ['Krusty Loose Studios','Burns Manor','The Android\'s Dungeon','The Frying Dutchman','The Simpson House','Springfield Retirement Castle','Nuclear Power Plant','Kwik-E-Mart','Barney\'s Bowlarama'],
+    SHORTCUTS: [['Springfield Retirement Castle','Krusty Loose Studios'],['Kwik-E-Mart',"The Android's Dungeon"]],
+    DIST: {
+      "The Android's Dungeon":        {"The Android's Dungeon":0,"Burns Manor":6,"Krusty Loose Studios":10,"The Frying Dutchman":5,"Barney's Bowlarama":13,"The Simpson House":9,"Springfield Retirement Castle":12,"Nuclear Power Plant":15,"Kwik-E-Mart":1},
+      "Burns Manor":                  {"The Android's Dungeon":6,"Burns Manor":0,"Krusty Loose Studios":4,"The Frying Dutchman":9,"Barney's Bowlarama":11,"The Simpson House":13,"Springfield Retirement Castle":17,"Nuclear Power Plant":12,"Kwik-E-Mart":17},
+      "Krusty Loose Studios":         {"The Android's Dungeon":10,"Burns Manor":4,"Krusty Loose Studios":0,"The Frying Dutchman":13,"Barney's Bowlarama":7,"The Simpson House":17,"Springfield Retirement Castle":1,"Nuclear Power Plant":14,"Kwik-E-Mart":13},
+      "The Frying Dutchman":          {"The Android's Dungeon":5,"Burns Manor":9,"Krusty Loose Studios":13,"The Frying Dutchman":0,"Barney's Bowlarama":8,"The Simpson House":4,"Springfield Retirement Castle":8,"Nuclear Power Plant":9,"Kwik-E-Mart":14},
+      "Barney's Bowlarama":           {"The Android's Dungeon":13,"Burns Manor":11,"Krusty Loose Studios":7,"The Frying Dutchman":8,"Barney's Bowlarama":0,"The Simpson House":10,"Springfield Retirement Castle":14,"Nuclear Power Plant":7,"Kwik-E-Mart":6},
+      "The Simpson House":            {"The Android's Dungeon":9,"Burns Manor":13,"Krusty Loose Studios":17,"The Frying Dutchman":4,"Barney's Bowlarama":10,"The Simpson House":0,"Springfield Retirement Castle":4,"Nuclear Power Plant":5,"Kwik-E-Mart":10},
+      "Springfield Retirement Castle":{"The Android's Dungeon":12,"Burns Manor":17,"Krusty Loose Studios":1,"The Frying Dutchman":8,"Barney's Bowlarama":14,"The Simpson House":4,"Springfield Retirement Castle":0,"Nuclear Power Plant":7,"Kwik-E-Mart":8},
+      "Nuclear Power Plant":          {"The Android's Dungeon":15,"Burns Manor":12,"Krusty Loose Studios":14,"The Frying Dutchman":9,"Barney's Bowlarama":7,"The Simpson House":5,"Springfield Retirement Castle":7,"Nuclear Power Plant":0,"Kwik-E-Mart":5},
+      "Kwik-E-Mart":                  {"The Android's Dungeon":1,"Burns Manor":17,"Krusty Loose Studios":13,"The Frying Dutchman":14,"Barney's Bowlarama":6,"The Simpson House":10,"Springfield Retirement Castle":8,"Nuclear Power Plant":5,"Kwik-E-Mart":0}
+    },
+    BOARD_POS: {
+      "The Android's Dungeon":[1,1,1,1],"Burns Manor":[2,1,1,1],"Krusty Loose Studios":[3,1,1,1],
+      "The Frying Dutchman":[1,2,1,1],"The Simpson House":[1,3,1,1],"Barney's Bowlarama":[3,2,1,2],
+      "Springfield Retirement Castle":[1,4,1,1],"Nuclear Power Plant":[2,4,1,1],"Kwik-E-Mart":[3,4,1,1]
+    }
+  },
+  classic: {
+    SUS: ['Miss Scarlet','Colonel Mustard','Mrs. White','Reverend Green','Mrs. Peacock','Professor Plum'],
+    WPN: ['Candlestick','Knife','Lead Pipe','Revolver','Rope','Wrench'],
+    RMS: ['Kitchen','Ballroom','Conservatory','Dining Room','Billiard Room','Lounge','Library','Hall','Study'],
+    SHORTCUTS: [['Kitchen','Study'],['Conservatory','Lounge']],
+    DIST: {
+      "Kitchen":       {"Kitchen":0,"Ballroom":7,"Conservatory":14,"Dining Room":5,"Billiard Room":12,"Lounge":10,"Library":16,"Hall":13,"Study":1},
+      "Ballroom":      {"Kitchen":7,"Ballroom":0,"Conservatory":7,"Dining Room":8,"Billiard Room":6,"Lounge":11,"Library":10,"Hall":8,"Study":12},
+      "Conservatory":  {"Kitchen":14,"Ballroom":7,"Conservatory":0,"Dining Room":15,"Billiard Room":5,"Lounge":1,"Library":10,"Hall":13,"Study":16},
+      "Dining Room":   {"Kitchen":5,"Ballroom":8,"Conservatory":15,"Dining Room":0,"Billiard Room":10,"Lounge":6,"Library":14,"Hall":9,"Study":14},
+      "Billiard Room": {"Kitchen":12,"Ballroom":6,"Conservatory":5,"Dining Room":10,"Billiard Room":0,"Lounge":11,"Library":6,"Hall":10,"Study":10},
+      "Lounge":        {"Kitchen":10,"Ballroom":11,"Conservatory":1,"Dining Room":6,"Billiard Room":11,"Lounge":0,"Library":14,"Hall":5,"Study":13},
+      "Library":       {"Kitchen":16,"Ballroom":10,"Conservatory":10,"Dining Room":14,"Billiard Room":6,"Lounge":14,"Library":0,"Hall":10,"Study":5},
+      "Hall":          {"Kitchen":13,"Ballroom":8,"Conservatory":13,"Dining Room":9,"Billiard Room":10,"Lounge":5,"Library":10,"Hall":0,"Study":8},
+      "Study":         {"Kitchen":1,"Ballroom":12,"Conservatory":16,"Dining Room":14,"Billiard Room":10,"Lounge":13,"Library":5,"Hall":8,"Study":0}
+    },
+    BOARD_POS: {
+      "Kitchen":[1,1,1,1],"Ballroom":[2,1,1,1],"Conservatory":[3,1,1,1],
+      "Dining Room":[1,2,1,1],"Billiard Room":[3,2,1,1],
+      "Lounge":[1,3,1,1],"Library":[3,3,1,1],
+      "Hall":[1,4,1,1],"Study":[3,4,1,1]
+    }
+  }
 };
 
-// Board grid positions [col 1-3, row 1-4, colSpan, rowSpan]
-const BOARD_POS = {
-  "The Android's Dungeon":         [1,1,1,1],
-  "Burns Manor":                   [2,1,1,1],
-  "Krusty Loose Studios":          [3,1,1,1],
-  "The Frying Dutchman":           [1,2,1,1],
-  "The Simpson House":             [1,3,1,1],
-  "Barney's Bowlarama":            [3,2,1,2],
-  "Springfield Retirement Castle": [1,4,1,1],
-  "Nuclear Power Plant":           [2,4,1,1],
-  "Kwik-E-Mart":                   [3,4,1,1]
-};
-
-const ALL = [...SUS,...WPN,...RMS];
+let currentEdition = 'simpsons';
+let SUS, WPN, RMS, SHORTCUTS, DIST, BOARD_POS;
+let ALL = [];
 const CAT = {};
-SUS.forEach(c=>CAT[c]='s'); WPN.forEach(c=>CAT[c]='w'); RMS.forEach(c=>CAT[c]='r');
+
+function loadEdition(name){
+  const ed = EDITIONS[name];
+  currentEdition = name;
+  SUS = ed.SUS; WPN = ed.WPN; RMS = ed.RMS;
+  SHORTCUTS = ed.SHORTCUTS; DIST = ed.DIST; BOARD_POS = ed.BOARD_POS;
+  ALL.length = 0; ALL.push(...SUS, ...WPN, ...RMS);
+  Object.keys(CAT).forEach(k => delete CAT[k]);
+  SUS.forEach(c=>CAT[c]='s'); WPN.forEach(c=>CAT[c]='w'); RMS.forEach(c=>CAT[c]='r');
+  // Update toggle labels
+  const elC = document.getElementById('ed-classic');
+  const elS = document.getElementById('ed-simpsons');
+  if(elC) elC.classList.toggle('ed-active', name==='classic');
+  if(elS) elS.classList.toggle('ed-active', name==='simpsons');
+}
+
+function switchEdition(){
+  const isSimpsons = document.getElementById('ed-switch').checked;
+  const name = isSimpsons ? 'simpsons' : 'classic';
+  if(name === currentEdition) return;
+  loadEdition(name);
+  // Reset game state
+  G.players=[]; G.myCards=new Set(); G.mat={}; G.pending=[]; G.sugs=[];
+  G.sol={s:null,w:null,r:null}; G.myChar=null; G.startRoom=null;
+  G.currentRoom=null; G.roll=null; G.shown=[]; G.turnIdx=0; G.turnNum=1;
+  G.playerChars={}; G.playerRooms={}; G.ready=false;
+  document.getElementById('turn-strip').style.display='none';
+  document.getElementById('status-bar').innerHTML='<div class="stat-pill"><div class="stat-dot"></div><span class="stat-txt">Game not started</span></div>';
+  buildSetup();
+  buildChips();
+  renderShortcuts('shortcut-display', false);
+  sw('setup');
+}
 
 function ck(c){ return c.toLowerCase().replace(/ /g,'-'); }
 function fc(k){ return ALL.find(c=>ck(c)===k); }
@@ -699,7 +761,7 @@ function renderBoard(){
   document.getElementById('board-grid').innerHTML =
     `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:repeat(4,auto);gap:5px;max-width:680px">
       ${RMS.map(r=>cells[r]).join('')}
-      ${hallCell(2)}${hallCell(3)}
+      ${[2,3,4].filter(r=>!RMS.some(rm=>{const p=BOARD_POS[rm];return p[0]<=2&&p[0]+p[2]-1>=2&&r>=p[1]&&r<p[1]+p[3];})).map(r=>hallCell(r)).join('')}
     </div>`;
 }
 
@@ -1498,6 +1560,7 @@ function parseInlineResponses(text, suggesterIdx, cards){
 }
 
 // ──────────────────────────── INIT ────────────────────────────
+loadEdition('simpsons');
 buildSetup();
 buildChips();
 renderShortcuts('shortcut-display', false);
