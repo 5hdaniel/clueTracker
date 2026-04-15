@@ -155,6 +155,18 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
   .sol-row{grid-template-columns:1fr}
   .meter{flex-direction:column;gap:10px}
 }
+
+/* ── VOICE ── */
+.mic-btn{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--gold);border:none;cursor:pointer;z-index:100;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.5);transition:all .2s}
+.mic-btn:hover{transform:scale(1.08);box-shadow:0 4px 20px rgba(201,168,76,.4)}
+.mic-btn.listening{background:#c94c4c;animation:mic-pulse 1.2s infinite}
+.mic-btn svg{width:24px;height:24px;fill:#111}
+@keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(201,76,76,.5)}50%{box-shadow:0 0 0 14px rgba(201,76,76,0)}}
+.voice-toast{position:fixed;bottom:88px;right:16px;max-width:340px;background:var(--surface2);border:0.5px solid var(--border);border-radius:4px;padding:12px 16px;z-index:100;font-size:11px;color:var(--text);opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none}
+.voice-toast.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.voice-toast .vt-heard{color:var(--text-dim);font-size:10px;margin-bottom:4px}
+.voice-toast .vt-action{color:var(--gold);font-weight:500}
+.voice-toast .vt-error{color:#e88080}
 </style>
 </head>
 <body>
@@ -166,6 +178,9 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
 
 <div class="status-bar" id="status-bar">
   <div class="stat-pill"><div class="stat-dot"></div><span class="stat-txt">Game not started</span></div>
+</div>
+
+<div id="turn-strip" style="display:none;padding:8px 24px;border-bottom:0.5px solid var(--border);background:var(--surface);overflow-x:auto">
 </div>
 
 <div class="tabs">
@@ -186,7 +201,7 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
       </select>
     </div>
   </div>
-  <div class="hint" style="margin-bottom:6px">Assign a character and starting room to each player</div>
+  <div class="hint" style="margin-bottom:6px">Enter players in clockwise turn order. Player 1 (you) goes first.</div>
   <div id="pname-inputs" style="margin-bottom:4px"></div>
 
   <hr class="div" style="margin:16px 0">
@@ -312,6 +327,14 @@ hr.div{border:none;border-top:0.5px solid var(--border);margin:18px 0}
 
 </div>
 
+<button class="mic-btn" id="mic-btn" onclick="toggleVoice()" title="Voice input">
+  <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+</button>
+<div class="voice-toast" id="voice-toast">
+  <div class="vt-heard" id="vt-heard"></div>
+  <div id="vt-action"></div>
+</div>
+
 <script>
 // ─────────────────────────── DATA ────────────────────────────
 const SUS = ['Homer','Marge','Bart','Lisa','Waylon Smithers','Krusty'];
@@ -360,7 +383,7 @@ const G = {
   mat:{}, pending:[], sugs:[],
   sol:{s:null, w:null, r:null},
   myChar:null, startRoom:null, currentRoom:null, roll:null,
-  shown:[], // [{card, toPlayerIdx, turnNum}]
+  shown:[], turnIdx:0, turnNum:1,
   playerChars:{}, playerRooms:{},
   ready:false
 };
@@ -417,6 +440,7 @@ function initGame(){
   G.startRoom = G.playerRooms[0];
   G.currentRoom = G.startRoom;
   G.mat={}; G.pending=[]; G.sugs=[]; G.shown=[]; G.sol={s:null,w:null,r:null}; G.ready=true;
+  G.turnIdx=0; G.turnNum=1;
   G.players.forEach((_,pi)=>{ G.mat[pi]={}; ALL.forEach(c=>{ G.mat[pi][c]='?'; }); });
   G.myCards.forEach(card=>{
     G.mat[0][card]='Y';
@@ -424,6 +448,8 @@ function initGame(){
   });
   propagate();
   updateStatusBar();
+  renderTurnStrip();
+  document.getElementById('turn-strip').style.display='flex';
   sw('analysis');
 }
 
@@ -710,6 +736,71 @@ function bestSuggestion(){
   return {s:bs, w:bw, r:br, score, dist};
 }
 
+// ─────────────────────── TURN TRACKER ────────────────────────
+function nextTurn(){
+  if(!G.ready) return;
+  G.turnIdx = (G.turnIdx + 1) % G.players.length;
+  if(G.turnIdx === 0) G.turnNum++;
+  G.roll = null;
+  const rd = document.getElementById('roll-display');
+  if(rd) rd.textContent = '—';
+  renderTurnStrip();
+  updateStatusBar();
+  // If on log tab, update the suggester
+  const whoEl = document.getElementById('s-who');
+  if(whoEl) whoEl.value = G.turnIdx;
+}
+
+function prevTurn(){
+  if(!G.ready) return;
+  if(G.turnIdx === 0 && G.turnNum > 1) G.turnNum--;
+  G.turnIdx = (G.turnIdx - 1 + G.players.length) % G.players.length;
+  renderTurnStrip();
+  updateStatusBar();
+  const whoEl = document.getElementById('s-who');
+  if(whoEl) whoEl.value = G.turnIdx;
+}
+
+function renderTurnStrip(){
+  if(!G.ready) return;
+  const strip = document.getElementById('turn-strip');
+  if(!strip) return;
+  const isMyTurn = G.turnIdx === 0;
+  const curPlayer = G.players[G.turnIdx];
+  const curChar = G.playerChars[G.turnIdx];
+  const col = PCOLS[G.turnIdx];
+
+  // Player dots
+  const dots = G.players.map((p,pi)=>{
+    const c = PCOLS[pi];
+    const active = pi === G.turnIdx;
+    const initials = p.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:42px;opacity:${active?1:.35};transition:opacity .2s">
+      <div style="width:${active?28:20}px;height:${active?28:20}px;border-radius:50%;background:${c};
+        display:flex;align-items:center;justify-content:center;font-size:${active?10:8}px;font-weight:600;color:#111;
+        ${active?`box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px ${c};`:''}transition:all .2s">${initials}</div>
+      <span style="font-size:8px;color:${active?c:'var(--text-dim)'};white-space:nowrap">${p}</span>
+    </div>`;
+  }).join('');
+
+  strip.innerHTML = `
+    <button onclick="prevTurn()" style="background:transparent;border:0.5px solid var(--border);color:var(--text-dim);width:28px;height:28px;border-radius:2px;cursor:pointer;font-size:14px;flex-shrink:0;margin-right:6px">◀</button>
+    <div style="display:flex;align-items:center;gap:10px;overflow-x:auto;flex:1;padding:2px 0">
+      ${dots}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:10px">
+      <div style="text-align:right">
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.12em">Round ${G.turnNum}</div>
+        <div style="font-size:12px;color:${col};font-weight:500">${isMyTurn?'Your turn':curPlayer+'\'s turn'}</div>
+      </div>
+      <button onclick="nextTurn()" style="background:transparent;border:0.5px solid ${col};color:${col};height:28px;padding:0 14px;border-radius:2px;cursor:pointer;font-size:10px;font-family:var(--ff);letter-spacing:.08em">NEXT ▶</button>
+    </div>
+  `;
+  strip.style.display = 'flex';
+  strip.style.alignItems = 'center';
+  strip.style.gap = '8px';
+}
+
 // ─────────────────────────── RENDER ──────────────────────────
 function sw(t){
   const ids = ['setup','matrix','log','board','analysis'];
@@ -728,8 +819,9 @@ function updateStatusBar(){
   const solved = G.sol.s && G.sol.w && G.sol.r;
   const bar = document.getElementById('status-bar');
   bar.innerHTML = `
-    ${G.myChar?`<div class="stat-pill"><div class="stat-dot sus"></div><span class="stat-txt">Playing as: </span><span class="stat-val">${G.myChar}</span></div>`:''}
-    ${G.currentRoom?`<div class="stat-pill"><div class="stat-dot rm"></div><span class="stat-txt">Currently in: </span><span class="stat-val">${G.currentRoom}</span></div>`:G.startRoom?`<div class="stat-pill"><div class="stat-dot rm"></div><span class="stat-txt">Started in: </span><span class="stat-val">${G.startRoom}</span></div>`:''}
+    <div class="stat-pill"><div class="stat-dot" style="background:${PCOLS[G.turnIdx]}"></div><span class="stat-txt">Turn: </span><span class="stat-val" style="color:${PCOLS[G.turnIdx]}">${G.players[G.turnIdx]}</span></div>
+    <div class="stat-pill"><div class="stat-dot"></div><span class="stat-txt">Round: </span><span class="stat-val">${G.turnNum}</span></div>
+    ${G.currentRoom?`<div class="stat-pill"><div class="stat-dot rm"></div><span class="stat-txt">In: </span><span class="stat-val">${G.currentRoom}</span></div>`:''}
     <div class="stat-pill"><div class="stat-dot gold"></div><span class="stat-txt">Combos: </span><span class="stat-val">${total}</span></div>
     <div class="stat-pill"><div class="stat-dot sus"></div><span class="stat-txt">Suspects: </span><span class="stat-val">${cs.length}</span></div>
     <div class="stat-pill"><div class="stat-dot wpn"></div><span class="stat-txt">Weapons: </span><span class="stat-val">${cw.length}</span></div>
@@ -921,7 +1013,10 @@ function renderLogForm(){
     return;
   }
   const whoEl = document.getElementById('s-who');
-  if(whoEl) whoEl.innerHTML = G.players.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
+  if(whoEl){
+    whoEl.innerHTML = G.players.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
+    whoEl.value = G.turnIdx; // auto-set to current turn
+  }
   const pop = (id, arr) => {
     const el = document.getElementById(id);
     if(el) el.innerHTML = arr.map(v=>`<option value="${v}">${v}</option>`).join('');
@@ -1004,6 +1099,9 @@ function logSug(){
   } else {
     renderShowAdvisor(null, null);
   }
+
+  // Advance to next turn
+  nextTurn();
 }
 
 function renderSugHist(){
@@ -1158,10 +1256,252 @@ function renderShowHistory(){
   }).join('');
 }
 
+// ──────────────────────── VOICE INPUT ─────────────────────────
+let voiceListening = false;
+let voiceRecognition = null;
+
+function initVoice(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    document.getElementById('mic-btn').title = 'Voice not supported in this browser';
+    document.getElementById('mic-btn').style.opacity = '0.3';
+    return;
+  }
+  voiceRecognition = new SR();
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+  voiceRecognition.lang = 'en-US';
+  voiceRecognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    parseVoiceCommand(transcript);
+  };
+  voiceRecognition.onerror = (e) => {
+    showVoiceToast('Error: '+e.error, '', true);
+    stopVoice();
+  };
+  voiceRecognition.onend = () => { stopVoice(); };
+}
+
+function toggleVoice(){
+  if(!voiceRecognition) { initVoice(); if(!voiceRecognition) return; }
+  if(voiceListening){ voiceRecognition.abort(); stopVoice(); }
+  else { voiceRecognition.start(); startVoice(); }
+}
+
+function startVoice(){
+  voiceListening = true;
+  document.getElementById('mic-btn').classList.add('listening');
+}
+
+function stopVoice(){
+  voiceListening = false;
+  document.getElementById('mic-btn').classList.remove('listening');
+}
+
+function showVoiceToast(heard, action, isError){
+  const toast = document.getElementById('voice-toast');
+  const hEl = document.getElementById('vt-heard');
+  const aEl = document.getElementById('vt-action');
+  hEl.textContent = heard ? `Heard: "${heard}"` : '';
+  aEl.className = isError ? 'vt-error' : 'vt-action';
+  aEl.textContent = action;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(()=>toast.classList.remove('show'), isError?4000:3500);
+}
+
+// ── Fuzzy matching ───────────────────────────────────
+function fuzzyFind(input, candidates){
+  const inp = input.toLowerCase().trim();
+  // Exact full match
+  let match = candidates.find(c=>inp.includes(c.toLowerCase()));
+  if(match) return match;
+  // Match by significant words (4+ chars)
+  match = candidates.find(c=>{
+    const words = c.toLowerCase().split(/[\s']+/).filter(w=>w.length>=3);
+    return words.some(w=>inp.includes(w));
+  });
+  if(match) return match;
+  // Partial start match
+  match = candidates.find(c=>{
+    const first = c.toLowerCase().split(/[\s']+/)[0];
+    return first.length>=3 && inp.includes(first);
+  });
+  return match||null;
+}
+
+function findPlayer(input){
+  const inp = input.toLowerCase();
+  // Check by name
+  const byName = G.players.findIndex(p=>inp.includes(p.toLowerCase()));
+  if(byName>=0) return byName;
+  // Check by character
+  for(let pi=0;pi<G.players.length;pi++){
+    const ch = G.playerChars[pi];
+    if(ch && inp.includes(ch.toLowerCase())) return pi;
+  }
+  // "I" or "me" or "my" → player 0
+  if(/\b(i |me |my )\b/.test(inp+' ')) return 0;
+  return -1;
+}
+
+// ── Parse commands ───────────────────────────────────
+function parseVoiceCommand(transcript){
+  if(!G.ready){
+    showVoiceToast(transcript, 'Start a game first.', true);
+    return;
+  }
+  const t = transcript.toLowerCase().trim();
+
+  // ── NEXT TURN ──
+  if(/\b(next turn|next player|end turn)\b/.test(t)){
+    nextTurn();
+    showVoiceToast(transcript, `Advanced to ${G.players[G.turnIdx]}'s turn.`);
+    return;
+  }
+
+  // ── DICE ROLL ──
+  const rollMatch = t.match(/\broll(?:ed)?\s*(?:a\s*)?(\d+)\b/);
+  if(rollMatch){
+    const val = parseInt(rollMatch[1]);
+    if(val>=1 && val<=12){
+      G.roll = val;
+      document.getElementById('roll-display').textContent = val;
+      renderBoard();
+      showVoiceToast(transcript, `Roll set to ${val}.`);
+      return;
+    }
+  }
+
+  // ── MOVE TO ROOM ──
+  const moveMatch = t.match(/\b(?:move to|go to|i'm at|i am at|went to|im at)\s+(.+)/i);
+  if(moveMatch){
+    const room = fuzzyFind(moveMatch[1], RMS);
+    if(room){
+      moveToRoom(room);
+      showVoiceToast(transcript, `Moved to ${room}.`);
+      return;
+    }
+  }
+
+  // ── FULL SUGGESTION ──
+  // Pattern: "[player] suggests [suspect] with [weapon] at/in [room]"
+  const sugMatch = t.match(/suggest/i);
+  if(sugMatch){
+    const suspect = fuzzyFind(t, SUS);
+    const weapon = fuzzyFind(t, WPN);
+    const room = fuzzyFind(t, RMS);
+    if(suspect && weapon && room){
+      // Figure out who suggested
+      let si = G.turnIdx; // default to current turn
+      // Check if a player name appears before "suggest"
+      const beforeSug = t.split(/suggest/i)[0];
+      const namedPlayer = findPlayer(beforeSug);
+      if(namedPlayer>=0) si = namedPlayer;
+
+      // Auto-fill the log form
+      const whoEl = document.getElementById('s-who');
+      const susEl = document.getElementById('s-sus');
+      const wpnEl = document.getElementById('s-wpn');
+      const rmEl = document.getElementById('s-rm');
+      if(whoEl) whoEl.value = si;
+      if(susEl) susEl.value = suspect;
+      if(wpnEl) wpnEl.value = weapon;
+      if(rmEl) rmEl.value = room;
+      buildResps();
+
+      // Parse inline responses: "[player] passed", "[player] showed [card]"
+      parseInlineResponses(t, si, [suspect, weapon, room]);
+
+      sw('log');
+      showVoiceToast(transcript, `${G.players[si]} suggests ${suspect} / ${weapon} / ${room} — review and log.`);
+      return;
+    } else {
+      const missing = [];
+      if(!suspect) missing.push('suspect');
+      if(!weapon) missing.push('weapon');
+      if(!room) missing.push('room');
+      showVoiceToast(transcript, `Couldn't identify: ${missing.join(', ')}.`, true);
+      return;
+    }
+  }
+
+  // ── PLAYER PASSED / SHOWED ──
+  const passMatch = t.match(/(\w+)\s+pass(?:ed|es)?/i);
+  if(passMatch){
+    const pi = findPlayer(passMatch[1]);
+    if(pi>=0){
+      const sel = document.getElementById('r'+pi);
+      if(sel){ sel.value='pass'; }
+      showVoiceToast(transcript, `${G.players[pi]} passed.`);
+      return;
+    }
+  }
+
+  const showMatch = t.match(/(\w+)\s+show(?:ed|s)?\s*(.*)/i);
+  if(showMatch){
+    const pi = findPlayer(showMatch[1]);
+    if(pi>=0){
+      const cardPart = showMatch[2]?.trim();
+      const sel = document.getElementById('r'+pi);
+      if(sel){
+        if(cardPart){
+          const card = fuzzyFind(cardPart, ALL);
+          if(card){
+            sel.value = 'x-'+ck(card);
+            showVoiceToast(transcript, `${G.players[pi]} showed ${card}.`);
+            return;
+          }
+        }
+        sel.value = 'showed';
+        showVoiceToast(transcript, `${G.players[pi]} showed a card (unknown).`);
+        return;
+      }
+    }
+  }
+
+  // ── NOTHING MATCHED ──
+  showVoiceToast(transcript, 'Didn\'t understand. Try: "[name] suggests [suspect] with [weapon] at [room]"', true);
+}
+
+function parseInlineResponses(text, suggesterIdx, cards){
+  // Look for patterns like "marge passed" or "lisa showed the necklace" after the suggestion
+  const parts = text.split(/,|\.|\band\b/);
+  parts.forEach(part=>{
+    const p = part.trim();
+    // Check for "[player] passed"
+    const passM = p.match(/(\w+)\s+pass(?:ed|es)?/i);
+    if(passM){
+      const pi = findPlayer(passM[1]);
+      if(pi>=0 && pi!==suggesterIdx){
+        const sel = document.getElementById('r'+pi);
+        if(sel) sel.value='pass';
+      }
+    }
+    // Check for "[player] showed [card]"
+    const showM = p.match(/(\w+)\s+show(?:ed|s)?\s*(.*)/i);
+    if(showM && !passM){
+      const pi = findPlayer(showM[1]);
+      if(pi>=0 && pi!==suggesterIdx){
+        const sel = document.getElementById('r'+pi);
+        if(sel){
+          const cardPart = showM[2]?.trim();
+          if(cardPart){
+            const card = fuzzyFind(cardPart, ALL);
+            if(card){ sel.value='x-'+ck(card); return; }
+          }
+          sel.value='showed';
+        }
+      }
+    }
+  });
+}
+
 // ──────────────────────────── INIT ────────────────────────────
 buildSetup();
 buildChips();
 renderShortcuts('shortcut-display', false);
+initVoice();
 </script>
 </body>
 </html>
